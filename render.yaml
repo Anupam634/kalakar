@@ -6,8 +6,8 @@ services:
     runtime: node
     plan: starter
     region: singapore
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    buildCommand: npm ci && npm run build && npm run build:server
+    startCommand: npm run start:prod
     healthCheckPath: /api/system
     numInstances: 1
     disk:
@@ -32,6 +32,10 @@ services:
         value: "1"
       - key: FREE_CREDITS
         value: "60"
+      - key: LOW_MEMORY
+        value: "1"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
       # secrets: filled in on Render, never committed
       - key: META_APP_SECRET
         sync: false

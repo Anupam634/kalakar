@@ -1,11 +1,13 @@
 // Small durable job queue in SQLite: generation, re-renders and scheduled publishing.
+import { config } from "./config.js";
 import { all, now, one, patch, run, type IgAccount, type Job, type Post } from "./db.js";
 import { generatePost, rerenderPost, friendly } from "./pipeline.js";
 import { publish, refreshTokens } from "./ig/instagram.js";
 import { autopilotTick } from "./autopilot.js";
 
 type Kind = "generate" | "rerender" | "publish";
-const LIMITS: Record<Kind, number> = { generate: 2, rerender: 2, publish: 3 };
+// on small servers posts are built one at a time (rendering + video editing are the memory-heavy parts)
+const LIMITS: Record<Kind, number> = config.lowMemory ? { generate: 1, rerender: 1, publish: 2 } : { generate: 2, rerender: 2, publish: 3 };
 const running: Record<Kind, number> = { generate: 0, rerender: 0, publish: 0 };
 
 export function enqueue(kind: Kind, userId: string, postId: string, runAt = now()): void {

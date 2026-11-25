@@ -1,6 +1,13 @@
 // The built-in designer: turns copy + product photo (+ optional AI scene) into finished post images.
 // Text is rendered by Pango through sharp, so long words wrap properly and Hindi/Tamil/etc. shape correctly.
 import sharp, { type OverlayOptions } from "sharp";
+import { config } from "../config.js";
+
+// small servers: one image thread and a small cache keep sharp well under 512 MB
+if (config.lowMemory) {
+  sharp.concurrency(1);
+  sharp.cache({ memory: 24, files: 0, items: 40 });
+}
 
 export type Style = "studio" | "bold" | "luxury" | "lifestyle" | "playful";
 export type Size = "feed" | "story";

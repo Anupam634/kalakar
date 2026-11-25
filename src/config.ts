@@ -50,6 +50,9 @@ export const config = {
 
   // Plans
   freeCredits: Number(env("FREE_CREDITS", "60")),
+
+  /** Small servers (512 MB): one post at a time, lean image + video settings. */
+  lowMemory: env("LOW_MEMORY") === "1",
 };
 
 /** Which Instagram login this server offers: Unified (new apps) wins when its three values are set. */

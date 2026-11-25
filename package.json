@@ -11,7 +11,9 @@
     "start": "tsx --env-file-if-exists=.env src/server.ts",
     "fonts": "tsx scripts/fonts.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
-    "test": "KALAKAR_DB=:memory: APP_SECRET=test-secret-test-secret-test-secret-1234 tsx --test test/*.test.ts"
+    "test": "KALAKAR_DB=:memory: APP_SECRET=test-secret-test-secret-test-secret-1234 tsx --test test/*.test.ts",
+    "build:server": "tsc -p tsconfig.build.json",
+    "start:prod": "node --env-file-if-exists=.env --max-old-space-size=256 build/server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

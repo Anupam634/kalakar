@@ -5,9 +5,10 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
+import { config } from "../config.js";
 
 const FFMPEG = (ffmpegPath as unknown as string | null) ?? "ffmpeg";
-const T = 0.45; // crossfade length (s)
+const T = 0.2; // dip-to-black length at each scene change (s)
 const FPS = 30;
 
 function ff(args: string[], timeoutMs = 240_000): Promise<string> {
@@ -49,10 +50,10 @@ export type ReelInput = {
 export async function makeReel(input: ReelInput): Promise<{ mp4: Buffer; duration: number }> {
   const dir = mkdtempSync(join(tmpdir(), "kalakar-reel-"));
   try {
+    // Each scene is encoded on its own (one ffmpeg at a time), then the clips are joined without
+    // re-encoding. Memory stays flat however long the reel is: no stream ever waits on another.
     const n = input.slides.length;
     const durations: number[] = [];
-    const args: string[] = ["-y"];
-    // video inputs
     for (let i = 0; i < n; i++) {
       writeFileSync(join(dir, `s${i}.png`), input.slides[i]!);
       const v = input.voice[i];
@@ -65,57 +66,58 @@ export async function makeReel(input: ReelInput): Promise<{ mp4: Buffer; duratio
       }
       durations.push(Math.round(d * 100) / 100);
     }
-    for (let i = 0; i < n; i++) {
-      const len = durations[i]! + (i < n - 1 ? T : 0);
-      args.push("-loop", "1", "-framerate", String(FPS), "-t", len.toFixed(2), "-i", join(dir, `s${i}.png`));
-    }
-    // audio inputs (voice or silence per slide)
-    for (let i = 0; i < n; i++) {
-      const v = input.voice[i];
-      if (v) args.push("-i", join(dir, `a${i}.${v.ext}`));
-      else args.push("-f", "lavfi", "-t", durations[i]!.toFixed(2), "-i", "anullsrc=r=44100:cl=stereo");
-    }
-    const hasMusic = Boolean(input.music);
-    if (hasMusic) args.push("-stream_loop", "-1", "-i", input.music!);
-
     const total = durations.reduce((a, b) => a + b, 0);
-    const f: string[] = [];
-    const transitions = ["fade", "smoothleft", "fade", "smoothup"];
+    // small servers: one encoder thread, superfast, short look-ahead, no B-frames (~140 MB instead of ~250 MB;
+    // files are larger but Instagram re-encodes anyway, and the slow push-in keeps quality)
+    const lean = config.lowMemory ? ["-threads", "1", "-x264-params", "rc-lookahead=5:ref=1:bframes=0:sync-lookahead=0"] : [];
+    const enc = ["-c:v", "libx264", "-preset", config.lowMemory ? "superfast" : "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(FPS), ...lean];
+
+    // 1. one clip per scene: slow push-in (or pull-out), quick dip-to-black between scenes
     for (let i = 0; i < n; i++) {
-      const frames = Math.ceil((durations[i]! + T) * FPS);
+      const d = durations[i]!;
+      const frames = Math.ceil(d * FPS);
       const zin = `min(1+0.10*on/${frames},1.1)`;
       const zout = `max(1.1-0.10*on/${frames},1)`;
-      f.push(
-        `[${i}:v]scale=1620:2880,zoompan=z='${i % 2 === 0 ? zin : zout}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=${FPS},setsar=1,format=yuv420p[v${i}]`,
-      );
+      const fades = [i > 0 ? `fade=t=in:st=0:d=${T}` : "", i < n - 1 ? `fade=t=out:st=${(d - T).toFixed(2)}:d=${T}` : ""].filter(Boolean).join(",");
+      const vf = [
+        "format=yuv420p",
+        `scale=${config.lowMemory ? "1296:2304" : "1620:2880"}`,
+        `zoompan=z='${i % 2 === 0 ? zin : zout}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=${FPS}`,
+        fades,
+        "setsar=1",
+        "format=yuv420p",
+      ].filter(Boolean).join(",");
+      const one = config.lowMemory ? ["-threads", "1"] : []; // single-threaded decode + filters on small servers
+      const filt = config.lowMemory ? ["-filter_threads", "1"] : [];
+      await ff(["-y", ...one, "-loop", "1", "-framerate", String(FPS), "-t", d.toFixed(2), "-i", join(dir, `s${i}.png`), ...filt, "-vf", vf, ...enc, "-an", join(dir, `c${i}.mp4`)]);
     }
-    let last = "v0";
-    let offset = 0;
-    for (let i = 1; i < n; i++) {
-      offset += durations[i - 1]!;
-      const out = i === n - 1 ? "vout" : `x${i}`;
-      f.push(`[${last}][v${i}]xfade=transition=${transitions[(i - 1) % transitions.length]}:duration=${T}:offset=${offset.toFixed(2)}[${out}]`);
-      last = out;
-    }
-    if (n === 1) f.push(`[v0]null[vout]`);
-    for (let i = 0; i < n; i++) {
-      f.push(`[${n + i}:a]aresample=44100,aformat=channel_layouts=stereo,apad=whole_dur=${durations[i]!.toFixed(2)},atrim=0:${durations[i]!.toFixed(2)}[a${i}]`);
-    }
-    f.push(`${Array.from({ length: n }, (_, i) => `[a${i}]`).join("")}concat=n=${n}:v=0:a=1[voice]`);
-    if (hasMusic) {
-      f.push(`[${2 * n}:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.16,atrim=0:${total.toFixed(2)},afade=t=out:st=${Math.max(0, total - 1.2).toFixed(2)}:d=1.2[bed]`);
-      f.push(`[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`);
-    } else f.push(`[voice]anull[aout]`);
 
+    // 2. join the clips as-is
+    writeFileSync(join(dir, "clips.txt"), durations.map((_, i) => `file 'c${i}.mp4'`).join("\n"));
+    await ff(["-y", "-f", "concat", "-safe", "0", "-i", join(dir, "clips.txt"), "-c", "copy", join(dir, "video.mp4")]);
+
+    // 3. the soundtrack: each voice line padded to its scene, plus the music bed
+    const aargs: string[] = ["-y"];
+    for (let i = 0; i < n; i++) {
+      const v = input.voice[i];
+      if (v) aargs.push("-i", join(dir, `a${i}.${v.ext}`));
+      else aargs.push("-f", "lavfi", "-t", durations[i]!.toFixed(2), "-i", "anullsrc=r=44100:cl=stereo");
+    }
+    const hasMusic = Boolean(input.music);
+    if (hasMusic) aargs.push("-stream_loop", "-1", "-i", input.music!);
+    const af: string[] = [];
+    for (let i = 0; i < n; i++) af.push(`[${i}:a]aresample=44100,aformat=channel_layouts=stereo,apad=whole_dur=${durations[i]!.toFixed(2)},atrim=0:${durations[i]!.toFixed(2)}[a${i}]`);
+    af.push(`${Array.from({ length: n }, (_, i) => `[a${i}]`).join("")}concat=n=${n}:v=0:a=1[voice]`);
+    if (hasMusic) {
+      af.push(`[${n}:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.16,atrim=0:${total.toFixed(2)},afade=t=out:st=${Math.max(0, total - 1.2).toFixed(2)}:d=1.2[bed]`);
+      af.push(`[voice][bed]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`);
+    } else af.push(`[voice]anull[aout]`);
+    aargs.push("-filter_complex", af.join(";"), "-map", "[aout]", "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-t", total.toFixed(2), join(dir, "audio.m4a"));
+    await ff(aargs);
+
+    // 4. mux
     const out = join(dir, "reel.mp4");
-    args.push(
-      "-filter_complex", f.join(";"),
-      "-map", "[vout]", "-map", "[aout]",
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(FPS),
-      "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
-      "-t", total.toFixed(2), "-movflags", "+faststart", out,
-    );
-    await ff(args);
+    await ff(["-y", "-i", join(dir, "video.mp4"), "-i", join(dir, "audio.m4a"), "-map", "0:v", "-map", "1:a", "-c", "copy", "-t", total.toFixed(2), "-movflags", "+faststart", out]);
     return { mp4: readFileSync(out), duration: total };
   } finally {
     rmSync(dir, { recursive: true, force: true });
