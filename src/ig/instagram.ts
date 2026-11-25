@@ -37,15 +37,17 @@ async function call<T>(method: "GET" | "POST", url: string, params: Record<strin
 
 export function authorizeUrl(state: string): string {
   if (igLoginMode() === "unified") {
+    // same shape as the "Login URL" the App Dashboard generates for the configuration
     const q = new URLSearchParams({
       client_id: config.metaAppId,
       config_id: config.metaConfigId,
+      override_default_response_type: "true",
       redirect_uri: redirectUri(),
       response_type: "code",
       state,
       prompt: "login", // always offer both the Instagram and the Facebook login
     });
-    return `https://www.facebook.com/${config.metaGraphVersion}/dialog/oauth?${q}`;
+    return `https://www.facebook.com/dialog/oauth?${q}`;
   }
   const q = new URLSearchParams({
     client_id: config.igAppId,
