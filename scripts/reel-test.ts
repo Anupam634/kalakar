@@ -1,0 +1,12 @@
+import "../src/media/fontsetup.js";
+import { writeFileSync } from "node:fs";
+import { renderSlide } from "../src/media/compose.js";
+import { makeReel } from "../src/media/video.js";
+const brand = { name: "Itr House", colors: ["#1B1A17", "#F1EBE1", "#B8865B"], fontStyle: "serif" };
+const texts = [{ headline: "Smells like monsoon in Lucknow", kicker: "New" }, { headline: "Aged 30 days", body: "Every bottle rests before it reaches you.", index: 2, total: 3 }, { headline: "Get yours today", price: "₹1,499", cta: "Link in bio" }];
+const roles = ["single", "point", "cta"] as const;
+const slides = await Promise.all(texts.map((t, i) => renderSlide({ style: "bold", size: "story", brand }, roles[i], t)));
+const t0 = Date.now();
+const r = await makeReel({ slides, voice: [null, null, null], fallbackText: texts.map((t) => t.headline + " " + (t.body ?? "")) });
+writeFileSync("data/reel-test.mp4", r.mp4);
+console.log("reel", r.duration.toFixed(2), "s", (r.mp4.length / 1e6).toFixed(2), "MB in", Date.now() - t0, "ms");

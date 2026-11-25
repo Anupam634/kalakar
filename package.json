@@ -1,0 +1,70 @@
+{
+  "name": "kalakar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kalakar - AI that turns your products into Instagram posts, carousels and voiced reels, then publishes them on schedule",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "start": "tsx --env-file-if-exists=.env src/server.ts",
+    "fonts": "tsx scripts/fonts.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
+    "test": "KALAKAR_DB=:memory: APP_SECRET=test-secret-test-secret-test-secret-1234 tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
+    "express": "^4.21.2",
+    "ffmpeg-static": "^5.3.0",
+    "multer": "^2.0.0",
+    "sharp": "^0.35.0",
+    "tsx": "^4.19.2",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@expo-google-fonts/bebas-neue": "^0.4.1",
+    "@expo-google-fonts/instrument-serif": "^0.4.1",
+    "@expo-google-fonts/inter-tight": "^0.4.2",
+    "@expo-google-fonts/noto-sans-bengali": "^0.4.4",
+    "@expo-google-fonts/noto-sans-devanagari": "^0.4.2",
+    "@expo-google-fonts/noto-sans-gujarati": "^0.4.2",
+    "@expo-google-fonts/noto-sans-gurmukhi": "^0.4.1",
+    "@expo-google-fonts/noto-sans-kannada": "^0.4.3",
+    "@expo-google-fonts/noto-sans-malayalam": "^0.4.2",
+    "@expo-google-fonts/noto-sans-tamil": "^0.4.3",
+    "@expo-google-fonts/noto-sans-telugu": "^0.4.2",
+    "@expo-google-fonts/playfair-display": "^0.4.2",
+    "@expo-google-fonts/poppins": "^0.4.1",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/inter-tight": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "@react-three/postprocessing": "^3.2.2",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "lenis": "^1.3.27",
+    "postprocessing": "^6.39.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "tailwindcss": "^4.1.0",
+    "three": "^0.187.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.0.0"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.3.0": true,
+    "esbuild@0.28.2": true
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

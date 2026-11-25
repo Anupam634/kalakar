@@ -1,0 +1,49 @@
+# Render Blueprint: one always-on web service with a persistent disk (SQLite database + media).
+# Kalakar runs its job queue in-process, so keep exactly one instance.
+services:
+  - type: web
+    name: kalakar
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/system
+    numInstances: 1
+    disk:
+      name: kalakar-data
+      mountPath: /var/data
+      sizeGB: 2
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DATA_DIR
+        value: /var/data
+      - key: APP_SECRET
+        generateValue: true
+      # Instagram (Unified login): app ID and configuration ID are not secret
+      - key: META_APP_ID
+        value: "1940205600678302"
+      - key: META_CONFIG_ID
+        value: "4502371096684573"
+      - key: META_GRAPH_VERSION
+        value: v27.0
+      - key: ALLOW_DEMO_INSTAGRAM
+        value: "1"
+      - key: FREE_CREDITS
+        value: "60"
+      # secrets: filled in on Render, never committed
+      - key: META_APP_SECRET
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

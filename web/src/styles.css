@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", sans-serif;
+  --font-tight: "Inter Tight Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+
+  /* three colours only: ink, paper, brass */
+  --color-ink: #0f0f0e;
+  --color-ink-2: #1a1a18;
+  --color-ink-3: #2a2a27;
+  --color-paper: #f3f0ea;
+  --color-paper-2: #e9e4da;
+  --color-line: #dcd6ca;
+  --color-mute: #6f6b63;
+  --color-brass: #c9a26b;
+  --color-brass-2: #a9824d;
+  --color-cream: #efe9df;
+  --color-surface: #ffffff;
+}
+
+/* ---------- "Cinema" theme: the app and site run dark; tokens flip inside this scope ---------- */
+.cinema {
+  --color-paper: #0c0b0a; /* page */
+  --color-paper-2: #1c1a17; /* quiet fill */
+  --color-cream: #12110f;
+  --color-surface: #161513; /* cards, inputs */
+  --color-ink: #f3f0ea; /* text, primary pill */
+  --color-ink-2: #e7e1d6;
+  --color-ink-3: #d6cfc2;
+  --color-line: #2a2724;
+  --color-mute: #a39d92;
+  --color-brass-2: #d9b680; /* brass text needs to be lighter on dark */
+  color-scheme: dark;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+/* light island inside the dark theme (the Instagram phone screen) */
+.lightscope {
+  --color-paper: #f3f0ea;
+  --color-paper-2: #e9e4da;
+  --color-cream: #efe9df;
+  --color-surface: #ffffff;
+  --color-ink: #0f0f0e;
+  --color-ink-2: #1a1a18;
+  --color-ink-3: #2a2a27;
+  --color-line: #dcd6ca;
+  --color-mute: #6f6b63;
+  --color-brass-2: #a9824d;
+  color-scheme: light;
+  color: var(--color-ink);
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: var(--color-brass);
+  color: var(--color-ink);
+}
+
+/* ---------- app UI ---------- */
+@utility input {
+  @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink outline-none transition placeholder:text-mute/70 focus:border-ink/60 focus:ring-4 focus:ring-ink/10 disabled:bg-paper-2;
+}
+@utility label {
+  @apply mb-1.5 block text-[13px] font-medium text-ink/80;
+}
+@utility card {
+  @apply rounded-[22px] border border-line bg-surface;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition select-none disabled:cursor-not-allowed disabled:opacity-45 active:scale-[0.98];
+}
+@utility btn-primary {
+  @apply btn bg-ink text-paper hover:bg-ink-3;
+}
+@utility btn-brass {
+  @apply btn bg-brass text-ink hover:bg-[#d6b27f];
+}
+@utility btn-secondary {
+  @apply btn border border-line bg-surface text-ink hover:-translate-y-px hover:border-ink/40;
+}
+@utility btn-ghost {
+  @apply btn text-ink/80 hover:bg-ink/5;
+}
+@utility btn-danger {
+  @apply btn border border-red-500/30 bg-surface text-red-400 hover:bg-red-500/10;
+}
+@utility chip {
+  @apply inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] font-medium text-ink/80 transition select-none hover:border-ink/40;
+}
+@utility chip-on {
+  @apply chip border-ink bg-ink text-paper hover:border-ink;
+}
+@utility eyebrow {
+  @apply text-[11px] font-semibold tracking-[0.22em] uppercase;
+}
+
+/* ---------- marketing site ---------- */
+@utility pill {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-[#f3f0ea] px-6 py-3 text-sm font-semibold text-[#0b0b0a] transition hover:-translate-y-px hover:bg-white active:translate-y-0 active:scale-[0.98];
+}
+@utility pill-line {
+  @apply inline-flex items-center justify-center gap-2 rounded-full border border-[#f3f0ea]/30 px-6 py-3 text-sm font-semibold text-[#f3f0ea] backdrop-blur-sm transition hover:-translate-y-px hover:border-[#f3f0ea]/70 active:translate-y-0 active:scale-[0.98];
+}
+/* hover layer: linked cards lift 2px, photos zoom a touch inside their frame */
+@utility lift {
+  @apply transition duration-300 ease-out hover:-translate-y-0.5;
+}
+@utility zoom {
+  @apply transition duration-700 ease-out group-hover:scale-[1.03];
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.shimmer {
+  background: linear-gradient(90deg, #ece7de 0%, #f7f4ee 50%, #ece7de 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+.cinema .shimmer {
+  background: linear-gradient(90deg, #1a1815 0%, #26231f 50%, #1a1815 100%);
+  background-size: 200% 100%;
+}
+/* the hero enters once on load */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes enter-photo {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes enter-phone {
+  from {
+    opacity: 0;
+    transform: translateY(60px) rotate(9deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(4deg);
+  }
+}
+.enter {
+  animation: enter 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.enter-photo {
+  animation: enter-photo 1.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.enter-phone {
+  animation: enter-phone 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .shimmer,
+  .enter,
+  .enter-photo,
+  .enter-phone {
+    animation: none;
+  }
+  .enter-phone {
+    transform: rotate(4deg);
+  }
+}
