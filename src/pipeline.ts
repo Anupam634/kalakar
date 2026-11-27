@@ -280,6 +280,19 @@ async function photoshoot(post: Post, brief: Brief, content: StoredContent, phot
       used.push(ideas[i]![1]);
     } else if (r.status === "rejected") console.warn("[shoot]", ideas[i]![0], (r.reason as Error)?.message);
   }
+  const broke = made.some((r) => r.status === "rejected" && /pre-paid credits|402|exceeded/i.test(String((r.reason as Error)?.message)));
+  if (!shots.length) {
+    // nothing to build Premium from: give the extra credits back and say why
+    const extra = costOf(brief) - costOf({ ...brief, premium: false, aiScene: false });
+    run("UPDATE users SET credits = credits + ? WHERE id = ?", extra, post.user_id);
+    content.notes!.push(
+      broke
+        ? `Premium could not run: the Hugging Face account that makes the AI photos and videos is out of credits (add credits at huggingface.co/settings/billing). The post was made with the studio designer and your ${extra} Premium credits were refunded.`
+        : `The AI photoshoot did not work this time, so the studio designer was used. Your ${extra} Premium credits were refunded.`,
+    );
+    content.shots = [];
+    return;
+  }
   if (shots.length < ideas.length) content.notes!.push(`${ideas.length - shots.length} of ${ideas.length} AI photos could not be made this time; the rest of the post uses the ones that worked.`);
 
   if (brief.format === "reel" && videoAvailable() && shots.length) {
@@ -328,6 +341,6 @@ export function friendly(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
   if (/401|authentication|api key/i.test(m)) return "An AI service rejected its API key. Check the keys in .env.";
   if (/429|rate/i.test(m)) return "An AI service is busy (rate limit). Please try again in a minute.";
-  if (/credit balance|billing|quota/i.test(m)) return "An AI service account is out of credit.";
+  if (/credit balance|billing|quota|pre-paid credits/i.test(m)) return "An AI service account is out of credit.";
   return m.length > 300 ? `${m.slice(0, 300)}…` : m;
 }
