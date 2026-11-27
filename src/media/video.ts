@@ -45,6 +45,9 @@ export type ReelInput = {
   voice: ({ buf: Buffer; ext: string } | null)[];
   fallbackText: string[];
   music?: string | null; // path to an audio file
+  /** Premium: per scene, an AI video clip (file path) and its transparent text layer (PNG 1080x1920). */
+  clips?: (string | null)[];
+  overlays?: (Buffer | null)[];
 };
 
 export async function makeReel(input: ReelInput): Promise<{ mp4: Buffer; duration: number }> {
@@ -89,6 +92,25 @@ export async function makeReel(input: ReelInput): Promise<{ mp4: Buffer; duratio
       ].filter(Boolean).join(",");
       const one = config.lowMemory ? ["-threads", "1"] : []; // single-threaded decode + filters on small servers
       const filt = config.lowMemory ? ["-filter_threads", "1"] : [];
+      const clip = input.clips?.[i];
+      const overlay = input.overlays?.[i];
+      if (clip && overlay) {
+        // AI motion scene: fill 9:16, slow the clip a little (or hold its last frame) to fit the voice line,
+        // then slide the text layer up while it fades in.
+        const ov = join(dir, `o${i}.png`);
+        writeFileSync(ov, overlay);
+        const len = (await audioDuration(clip)) || 5;
+        const slow = d > len ? Math.min(1.5, d / len) : 1;
+        const hold = Math.max(0, d - len * slow);
+        const fc = [
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,setpts=${slow.toFixed(3)}*PTS,fps=${FPS}` +
+            `${hold > 0 ? `,tpad=stop_mode=clone:stop_duration=${hold.toFixed(2)}` : ""},trim=duration=${d.toFixed(2)},format=yuv420p[v]`,
+          `[1:v]format=rgba,fade=t=in:st=0.25:d=0.5:alpha=1[o]`,
+          `[v][o]overlay=x=0:y='if(lt(t,0.25),70,70*max(0,1-(t-0.25)/0.5))':format=auto${fades ? `,${fades}` : ""},format=yuv420p[out]`,
+        ].join(";");
+        await ff(["-y", ...one, "-i", clip, "-loop", "1", "-framerate", String(FPS), "-t", d.toFixed(2), "-i", ov, ...filt, "-filter_complex", fc, "-map", "[out]", ...enc, "-an", join(dir, `c${i}.mp4`)]);
+        continue;
+      }
       await ff(["-y", ...one, "-loop", "1", "-framerate", String(FPS), "-t", d.toFixed(2), "-i", join(dir, `s${i}.png`), ...filt, "-vf", vf, ...enc, "-an", join(dir, `c${i}.mp4`)]);
     }
 

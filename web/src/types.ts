@@ -13,7 +13,7 @@ export type Profile = {
 
 export type Instagram = { mode: "live" | "demo"; username: string; name: string | null; picture: string | null; accountType: string | null; followers: number | null; mediaCount: number | null; connectedAt: string; tokenExpiresAt: string | null };
 
-export type System = { writer: string; image: string; voice: string[]; instagram: "live" | "demo" | "off"; photos?: string; publicUrl: string; publicUrlOk: boolean };
+export type System = { writer: string; image: string; voice: string[]; instagram: "live" | "demo" | "off"; photos?: string; video?: string; publicUrl: string; publicUrlOk: boolean };
 
 export type Product = { id: string; name: string; description: string; price: string; offer: string; link: string; features: string[]; images: Asset[]; active: boolean; posts: number; createdAt: string; updatedAt: string };
 
@@ -21,7 +21,7 @@ export type Format = "image" | "carousel" | "reel" | "story";
 export type Style = "auto" | "studio" | "bold" | "luxury" | "lifestyle" | "playful";
 export type Brief = {
   format: Format; productId?: string | null; topic?: string; goal: string; style: Style; language: string; slides?: number;
-  voice: { enabled: boolean; gender: "female" | "male"; style: string }; aiScene: boolean; music: boolean; extra?: string; photoAssetId?: string;
+  voice: { enabled: boolean; gender: "female" | "male"; style: string }; aiScene: boolean; premium?: boolean; music: boolean; extra?: string; photoAssetId?: string;
 };
 export type Slide = { kicker: string; headline: string; body: string; voiceover: string };
 export type PostStatus = "draft" | "generating" | "ready" | "needs_approval" | "scheduled" | "publishing" | "published" | "failed";

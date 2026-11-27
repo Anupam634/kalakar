@@ -30,6 +30,8 @@ export const config = {
   hfToken: env("HF_TOKEN"),
   hfEditModel: env("HF_EDIT_MODEL", "black-forest-labs/FLUX.1-Kontext-dev"),
   hfImageModel: env("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell"),
+  // image-to-video for Premium reels (5 s clips with real motion)
+  hfVideoModel: env("HF_VIDEO_MODEL", "Wan-AI/Wan2.2-I2V-A14B"),
 
   // Voice
   elevenKey: env("ELEVENLABS_API_KEY"),
@@ -81,6 +83,7 @@ export function providerStatus() {
     voice: [config.elevenKey && "elevenlabs", config.sarvamKey && "sarvam", config.openaiKey && "openai"].filter(Boolean) as string[],
     instagram: igConfigured() ? "live" : config.allowDemoInstagram ? "demo" : "off",
     photos: config.unsplashKey ? "unsplash" : "off",
+    video: config.hfToken ? "hf" : "off",
     publicUrl: config.publicUrl,
     publicUrlOk: config.publicUrl.startsWith("https://"),
   };

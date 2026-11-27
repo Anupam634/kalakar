@@ -3,17 +3,22 @@ import sharp from "sharp";
 import { imageProvider } from "./config.js";
 import { all, now, one, parseJson, patch, run, type Autopilot, type Post, type PostFormat, type Product, type Profile } from "./db.js";
 import { writeContent, type Brief, type Content } from "./ai/writer.js";
-import { renderSlide, toJpeg, type Design, type Role, type SlideText, type Style } from "./media/compose.js";
-import { generateScene } from "./media/imagegen.js";
+import { renderOverlay, renderSlide, toJpeg, type Design, type Role, type SlideText, type Style } from "./media/compose.js";
+import { generateScene, generateShot, type Shot } from "./media/imagegen.js";
+import { animate, motionPrompt, videoAvailable } from "./media/aivideo.js";
 import { synthesize, voiceAvailable } from "./media/voice.js";
 import { makeReel } from "./media/video.js";
 import { deleteAsset, getAsset, readAsset, saveAsset, assetPath } from "./media/files.js";
 import { enqueue } from "./jobs.js";
 
 export const COST: Record<PostFormat, number> = { image: 1, story: 1, carousel: 2, reel: 4 };
-export const costOf = (b: Pick<Brief, "format" | "aiScene">) => COST[b.format] + (b.aiScene && imageProvider() ? 2 : 0);
+/** Premium adds the AI photoshoot (+3) and, for reels, AI motion clips (+8 in total). */
+export const costOf = (b: Pick<Brief, "format" | "aiScene" | "premium">) =>
+  COST[b.format] + (b.premium && imageProvider() ? (b.format === "reel" ? 8 : 3) : b.aiScene && imageProvider() ? 2 : 0);
 
 export type StoredContent = Content & {
+  /** Premium AI photoshoot: shot images and (reels) their AI motion clips. */
+  shots?: { kind: Shot; image: string; clip?: string | null }[];
   scene_asset?: string | null;
   voice?: { asset: string; text: string }[];
   style_used?: Style;
@@ -50,7 +55,16 @@ function slideTexts(c: Content, b: Brief, product: Product | null): { role: Role
       // writers sometimes repeat the call to action as the body line: show it once, as the button
       const same = (a?: string, b?: string) => Boolean(a && b && a.trim().toLowerCase() === b.trim().toLowerCase());
       const line = body ?? product?.offer ?? undefined;
-      return { role: "cta" as Role, text: { headline: s.headline, body: same(line, c.cta) || same(line, s.headline) ? undefined : line, price, cta: c.cta || undefined } };
+      const norm = (x?: string) => (x ?? "").replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+      return {
+        role: "cta" as Role,
+        text: {
+          headline: s.headline,
+          body: same(line, c.cta) || same(line, s.headline) ? undefined : line,
+          price: price && norm(price) === norm(s.headline) ? undefined : price, // "₹1,499" as the headline: don't repeat it
+          cta: c.cta && norm(c.cta) !== norm(s.headline) ? c.cta : undefined, // "DM to order" as the headline: no duplicate button
+        },
+      };
     }
     return { role: "point" as Role, text: { headline: s.headline, body, index: i + 1, total: pager } };
   });
@@ -68,7 +82,12 @@ async function buildMedia(post: Post, brief: Brief, content: StoredContent, prof
   const size = brief.format === "reel" || brief.format === "story" ? "story" : "feed";
   const photo = await mainPhoto(post, brief, product);
   const scene = content.scene_asset ? getAsset(content.scene_asset, post.user_id) : undefined;
-  const style = resolveStyle(brief.style, profile, Boolean(scene));
+  // Premium photoshoot: each slide gets its own shot (hero, person, detail, ...)
+  const shots = (content.shots ?? [])
+    .map((s) => ({ ...s, img: getAsset(s.image, post.user_id), mov: s.clip ? getAsset(s.clip, post.user_id) : undefined }))
+    .filter((s) => s.img);
+  const shotImgs = shots.map((s) => readAsset(s.img!));
+  const style = shots.length && brief.style === "auto" ? "lifestyle" : resolveStyle(brief.style, profile, Boolean(scene));
   const logoA = getAsset(profile.logo_asset, post.user_id);
   const design: Design = {
     style,
@@ -84,8 +103,18 @@ async function buildMedia(post: Post, brief: Brief, content: StoredContent, prof
     },
   };
   progress(post.id, steps, "design");
+  const texts = slideTexts(content, brief, product);
+  const sceneFor = (i: number) => (shotImgs.length ? shotImgs[i % shotImgs.length]! : design.scene);
   const pngs: Buffer[] = [];
-  for (const s of slideTexts(content, brief, product)) pngs.push(await renderSlide(design, s.role, s.text));
+  for (const [i, s] of texts.entries()) pngs.push(await renderSlide({ ...design, scene: sceneFor(i) }, s.role, s.text));
+  // Premium reels: every scene but the end card plays an AI motion clip under a sliding text layer
+  const clips: (string | null)[] = texts.map((s, i) => {
+    if (brief.format !== "reel" || s.role === "cta" || !shots.length) return null;
+    const m = shots[i % shots.length]!.mov;
+    return m ? assetPath(m) : null;
+  });
+  const overlays: (Buffer | null)[] = [];
+  for (const [i, s] of texts.entries()) overlays.push(clips[i] ? await renderOverlay({ ...design, scene: null }, s.text) : null);
 
   const old = parseJson<string[]>(post.media, []);
   const oldCover = post.cover_asset;
@@ -132,6 +161,8 @@ async function buildMedia(post: Post, brief: Brief, content: StoredContent, prof
       voice: voices,
       fallbackText: content.slides.map((s) => `${s.headline} ${s.body}`),
       music: music ? assetPath(music) : null,
+      clips,
+      overlays,
     });
     const v = saveAsset(post.user_id, "video", reel.mp4, "mp4", "video/mp4", { width: 1080, height: 1920, duration: reel.duration });
     media.push(v.id);
@@ -172,7 +203,8 @@ export async function generatePost(postId: string): Promise<void> {
   const brief = parseJson<Brief>(post.brief, {} as Brief);
   const profile = getProfile(post.user_id);
   const product = brief.productId ? (one<Product>("SELECT * FROM products WHERE id = ? AND user_id = ?", brief.productId, post.user_id) ?? null) : null;
-  const steps = ["read", "write", "design", ...(brief.format === "reel" ? ["voice", "video"] : [])];
+  const premium = Boolean(brief.premium && imageProvider());
+  const steps = ["read", "write", ...(premium ? ["shoot", ...(brief.format === "reel" && videoAvailable() ? ["film"] : [])] : []), "design", ...(brief.format === "reel" ? ["voice", "video"] : [])];
   patch("posts", post.id, { status: "generating", error: null, updated_at: now() }, POST_FIELDS);
   try {
     progress(post.id, steps, "read");
@@ -192,12 +224,15 @@ export async function generatePost(postId: string): Promise<void> {
       patch("products", product.id, { vision_notes: content.product_look.slice(0, 500) }, ["vision_notes"]);
     }
     content.notes = [];
-    if (content.writer === "template") content.notes.push("Written from templates because no Claude API key is set. Add ANTHROPIC_API_KEY for AI copywriting in any language.");
+    if (content.writer === "template") content.notes.push("Written from templates because no AI writer key is set (Sarvam, Claude or Gemini).");
 
     const old = parseJson<StoredContent>(post.content, {} as StoredContent);
     if (old.scene_asset) deleteAsset(getAsset(old.scene_asset, post.user_id));
+    for (const s of old.shots ?? []) [s.image, s.clip].forEach((id) => deleteAsset(getAsset(id, post.user_id)));
     content.voice = old.voice;
-    if (brief.aiScene) {
+    if (premium) {
+      await photoshoot(post, brief, content, small, steps);
+    } else if (brief.aiScene) {
       progress(post.id, steps, "design");
       try {
         const sc = await generateScene({ prompt: content.scene_prompt, photo: small, aspect: brief.format === "reel" || brief.format === "story" ? "9:16" : "4:5" });
@@ -220,6 +255,52 @@ export async function generatePost(postId: string): Promise<void> {
     patch("posts", post.id, { status: "failed", error: friendly(e), progress: "{}", updated_at: now() }, POST_FIELDS);
     run("UPDATE users SET credits = credits + ? WHERE id = ?", costOf(brief), post.user_id);
   }
+}
+
+/**
+ * Premium: an AI photoshoot (hero, a real-looking person using the product, a detail close-up) made from the
+ * product photo, then - for reels - each shot filmed into a short AI motion clip. Shots and clips run in parallel;
+ * anything that fails falls back to the designed still and leaves a note.
+ */
+async function photoshoot(post: Post, brief: Brief, content: StoredContent, photo: Buffer | null, steps: string[]) {
+  progress(post.id, steps, "shoot");
+  const aspect = brief.format === "reel" || brief.format === "story" ? "9:16" : "4:5";
+  const ideas: [Shot, string][] = [
+    ["hero", content.scene_prompt],
+    ["person", content.human_shot || "A smiling young Indian woman holds the product close to the camera in a sunlit room"],
+    ["detail", content.detail_shot || "Extreme close-up of the product, soft light glinting on its surface"],
+  ];
+  const made = await Promise.allSettled(ideas.map(([k, idea]) => generateShot(k, idea, photo, aspect)));
+  const shots: NonNullable<StoredContent["shots"]> = [];
+  const used: string[] = [];
+  for (const [i, r] of made.entries()) {
+    if (r.status === "fulfilled" && r.value) {
+      const jpg = await sharp(r.value).jpeg({ quality: 92 }).toBuffer();
+      shots.push({ kind: ideas[i]![0], image: saveAsset(post.user_id, "scene", jpg, "jpg", "image/jpeg").id });
+      used.push(ideas[i]![1]);
+    } else if (r.status === "rejected") console.warn("[shoot]", ideas[i]![0], (r.reason as Error)?.message);
+  }
+  if (shots.length < ideas.length) content.notes!.push(`${ideas.length - shots.length} of ${ideas.length} AI photos could not be made this time; the rest of the post uses the ones that worked.`);
+
+  if (brief.format === "reel" && videoAvailable() && shots.length) {
+    progress(post.id, steps, "film");
+    const filmed = await Promise.allSettled(
+      shots.map(async (s, i) => {
+        const key = await sharp(readAsset(getAsset(s.image, post.user_id)!)).resize(720, 1280, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+        return animate(key, motionPrompt(s.kind, used[i]!));
+      }),
+    );
+    let failed = 0;
+    for (const [i, r] of filmed.entries()) {
+      if (r.status === "fulfilled") shots[i]!.clip = saveAsset(post.user_id, "clip", r.value, "mp4", "video/mp4", { width: 720, height: 1280, duration: 5 }).id;
+      else {
+        failed++;
+        console.warn("[film]", shots[i]!.kind, (r.reason as Error)?.message);
+      }
+    }
+    if (failed) content.notes!.push(`${failed} AI video clip${failed > 1 ? "s" : ""} could not be filmed this time; those scenes use the designed still with a slow zoom.`);
+  }
+  content.shots = shots;
 }
 
 /** Re-renders media after the owner edits text. No AI writing cost; changed voice lines are re-recorded. */

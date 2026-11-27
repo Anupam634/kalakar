@@ -42,6 +42,8 @@ export type Brief = {
   slides?: number;
   voice: { enabled: boolean; gender: "female" | "male"; style: string };
   aiScene: boolean;
+  /** AI photoshoot with real-looking people + AI motion video (Hugging Face). */
+  premium?: boolean;
   photoAssetId?: string;
   music: boolean;
   extra?: string;
@@ -56,6 +58,8 @@ const ContentZ = z.object({
   cta: z.string(),
   scene_prompt: z.string(),
   product_look: z.string(),
+  human_shot: z.string().default(""),
+  detail_shot: z.string().default(""),
   slides: z.array(SlideZ),
 });
 export type Content = z.infer<typeof ContentZ> & { writer: "claude" | "sarvam" | "gemini" | "template" };
@@ -64,7 +68,7 @@ export type SlideCopy = z.infer<typeof SlideZ>;
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["hook", "caption", "hashtags", "alt_text", "cta", "scene_prompt", "product_look", "slides"],
+  required: ["hook", "caption", "hashtags", "alt_text", "cta", "scene_prompt", "product_look", "human_shot", "detail_shot", "slides"],
   properties: {
     hook: { type: "string", description: "The scroll-stopping first line of the caption." },
     caption: { type: "string", description: "Full Instagram caption, starting with the hook, with line breaks. No hashtags." },
@@ -73,6 +77,8 @@ const SCHEMA = {
     cta: { type: "string", description: "Short on-image call to action, max 5 words." },
     scene_prompt: { type: "string", description: "English art direction for a photographed scene around the product." },
     product_look: { type: "string", description: "What the product in the photo looks like (1-2 sentences), or empty." },
+    human_shot: { type: "string", description: "One English sentence: a real-looking person from the audience naturally holding or using the product (age, clothing, place, action)." },
+    detail_shot: { type: "string", description: "One English sentence: an extreme close-up idea of the product (texture, cap, label, light)." },
     slides: {
       type: "array",
       items: {
@@ -159,6 +165,8 @@ export function promptFor({ profile: p, product, brief: b, avoid }: WriterInput)
     "Caption: 60-160 words, short paragraphs, ends with a clear call to action. Hashtags go only in the hashtags field.",
     "Hashtags: mix English tags with tags in the post's language; no spaces, no # sign.",
     "scene_prompt: describe a real photographed setting that fits the product and brand (surface, props, light, colour palette, mood). No text in the scene.",
+    "human_shot (English): one sentence for a photo of a real-looking Indian person from the target audience naturally holding or using the product: age, clothing, setting, action. Tasteful, no celebrities.",
+    "detail_shot (English): one sentence for an extreme close-up of the product: texture, cap, label, light.",
     product ? "If a product photo is attached, describe it in product_look and make the copy match what is actually visible." : "product_look: empty string.",
   ];
   return lines.filter((l): l is string => typeof l === "string" && l !== "").join("\n").replace(/\n(POST TO CREATE|PRODUCT|TOPIC)/g, "\n\n$1");
@@ -213,7 +221,7 @@ function jsonOf(text: string): unknown {
 }
 
 const JSON_SHAPE = `Reply with ONE JSON object only (no markdown, no explanation) with exactly these keys:
-{"hook": string, "caption": string, "hashtags": string[], "alt_text": string, "cta": string, "scene_prompt": string, "product_look": string,
+{"hook": string, "caption": string, "hashtags": string[], "alt_text": string, "cta": string, "scene_prompt": string, "product_look": string, "human_shot": string, "detail_shot": string,
  "slides": [{"kicker": string, "headline": string, "body": string, "voiceover": string}]}
 Use "" for fields that do not apply.`;
 
@@ -329,6 +337,8 @@ export function templateContent({ profile: p, product, brief: b }: WriterInput, 
     cta,
     scene_prompt: `${name} on a clean surface with soft daylight, props that suit a ${p.category || "lifestyle"} brand`,
     product_look: "",
+    human_shot: `A smiling Indian woman in her late twenties holds the ${name} close to the camera in a sunlit room`,
+    detail_shot: `Extreme close-up of the ${name}, soft light glinting on its surface`,
     slides: slides.slice(0, n),
   };
 }

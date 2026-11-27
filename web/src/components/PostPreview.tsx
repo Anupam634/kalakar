@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { Icon } from "./ui";
+import { ReelPlayer } from "./ReelPlayer";
 import type { Asset } from "../types";
 
 /** A phone showing the post the way followers will see it. Carousel swipes; reels play with sound. */
@@ -52,7 +53,7 @@ export function PostPreview({
           >
             {cur ? (
               cur.mime.startsWith("video") ? (
-                <video key={cur.url} src={cur.url} className="h-full w-full object-cover" controls playsInline loop preload="metadata" poster={poster ?? undefined} />
+                <ReelPlayer key={cur.url} src={cur.url} poster={poster} />
               ) : (
                 <img key={cur.url} src={cur.url} alt="" draggable={false} className="h-full w-full object-cover" />
               )
@@ -79,7 +80,7 @@ export function PostPreview({
               </>
             )}
             {vertical && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3.5 pb-4 pt-16 text-white">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] bg-gradient-to-t from-black/60 to-transparent pb-5 pl-3.5 pr-12 pt-16 text-white">
                 <div className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold">
                   <span className="grid h-6 w-6 place-items-center overflow-hidden rounded-full bg-white/90 text-[10px] text-ink">
                     {avatar ? <img src={avatar} alt="" className="h-full w-full object-contain" /> : username.slice(0, 1).toUpperCase()}

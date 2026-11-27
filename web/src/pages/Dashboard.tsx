@@ -25,6 +25,7 @@ export function Thumb({ p, className = "" }: { p: Post; className?: string }) {
 export function PostTile({ p, when }: { p: Post; when?: string }) {
   const src = coverOf(p);
   const tall = p.format === "reel" || p.format === "story";
+  const reel = p.format === "reel" && p.status !== "generating" ? p.media.find((m) => m.mime.startsWith("video"))?.url : undefined;
   const busy = p.status === "generating" || p.status === "draft";
   const st = STATUS[p.status];
   const brass = p.status === "needs_approval" || p.status === "scheduled";
@@ -32,6 +33,31 @@ export function PostTile({ p, when }: { p: Post; when?: string }) {
     <Link to={`/app/posts/${p.id}`} className="group lift mb-6 block break-inside-avoid">
       <div className={`relative overflow-hidden rounded-[22px] bg-paper-2 ${tall ? "aspect-[9/16]" : "aspect-[4/5]"}`}>
         {src ? <img src={src} alt="" loading="lazy" className="zoom h-full w-full object-cover" /> : <div className={`h-full w-full ${busy ? "shimmer" : ""}`} />}
+        {reel && (
+          <>
+            <video
+              src={reel}
+              muted
+              loop
+              playsInline
+              preload="none"
+              className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+              ref={(el) => {
+                const card = el?.closest("a");
+                if (!el || !card || card.dataset.reel) return;
+                card.dataset.reel = "1";
+                card.addEventListener("mouseenter", () => el.play().catch(() => {}));
+                card.addEventListener("mouseleave", () => {
+                  el.pause();
+                  el.currentTime = 0;
+                });
+              }}
+            />
+            <span className="pointer-events-none absolute bottom-3 left-3 grid h-9 w-9 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm transition group-hover:opacity-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+          </>
+        )}
         <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-sm backdrop-blur-sm ${brass ? "bg-brass text-[#0b0b0a]" : p.status === "failed" ? "bg-red-500/85 text-white" : "bg-black/70 text-white"}`}>
           {st.label}
           {when ? ` · ${when}` : ""}

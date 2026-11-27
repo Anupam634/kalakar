@@ -51,6 +51,7 @@ const BriefZ = z.object({
   slides: z.number().int().min(3).max(8).optional(),
   voice: z.object({ enabled: z.boolean(), gender: z.enum(["female", "male"]), style: z.enum(["warm", "energetic", "deep", "friendly"]) }),
   aiScene: z.boolean(),
+  premium: z.boolean().optional(),
   music: z.boolean(),
   extra: z.string().trim().max(600).optional(),
   photoAssetId: z.string().max(64).optional(),
@@ -80,6 +81,7 @@ r.post("/posts", rateLimit("create", 60, 3600_000), ah(async (req, res) => {
   if (!brief.productId && !brief.topic) return res.status(400).json({ error: "Pick a product or write what the post is about." });
   if (brief.photoAssetId && !getAsset(brief.photoAssetId, u.id)) return res.status(400).json({ error: "That photo is not in your library." });
   if (brief.aiScene && !imageProvider()) brief.aiScene = false;
+  if (brief.premium && !imageProvider()) brief.premium = false;
   const cost = costOf(brief);
   if (!spend(u.id, cost)) return res.status(402).json({ error: `Not enough credits. This post needs ${cost}.` });
   const id = newId();
@@ -133,6 +135,7 @@ r.post("/posts/:id/regenerate", rateLimit("create", 60, 3600_000), ah(async (req
   if (!b) return;
   const brief = (b.brief ?? parseJson<Brief>(p.brief, {} as Brief)) as Brief;
   if (brief.aiScene && !imageProvider()) brief.aiScene = false;
+  if (brief.premium && !imageProvider()) brief.premium = false;
   const cost = costOf(brief);
   if (!spend(u.id, cost)) return res.status(402).json({ error: `Not enough credits. This needs ${cost}.` });
   cancelPublish(p.id);
@@ -212,7 +215,7 @@ r.delete("/posts/:id", (req, res) => {
   const c = parseJson<StoredContent>(p.content, {} as StoredContent);
   run("DELETE FROM jobs WHERE post_id = ?", p.id);
   run("DELETE FROM posts WHERE id = ?", p.id);
-  for (const id of [...parseJson<string[]>(p.media, []), p.cover_asset, c.scene_asset, ...(c.voice ?? []).map((v) => v.asset)]) deleteAsset(getAsset(id, u.id));
+  for (const id of [...parseJson<string[]>(p.media, []), p.cover_asset, c.scene_asset, ...(c.voice ?? []).map((v) => v.asset), ...(c.shots ?? []).flatMap((s) => [s.image, s.clip])]) deleteAsset(getAsset(id, u.id));
   res.json({ ok: true });
 });
 

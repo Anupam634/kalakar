@@ -492,3 +492,36 @@ export async function renderSlide(d: Design, role: Role, s: SlideText): Promise<
 
 export const toJpeg = (b: Buffer) => sharp(b).flatten({ background: "#ffffff" }).jpeg({ quality: 92, mozjpeg: true, chromaSubsampling: "4:4:4" }).toBuffer();
 export const dims = (size: Size) => DIM[size];
+
+/**
+ * Text layer for a moving AI clip in a Premium reel: transparent 1080x1920 PNG with a soft bottom shade,
+ * the brand mark, a kicker, a large headline and one supporting line. The video editor slides it in.
+ */
+export async function renderOverlay(d: Design, s: SlideText): Promise<Buffer> {
+  const c = ctxFor({ ...d, size: "story" });
+  const { W, H, M, fonts: f } = c;
+  const width = W - M * 2 - 150; // keep clear of Instagram's like/comment/share column
+  const layers: OverlayOptions[] = [];
+  const shade = svg(W, H, `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#000" stop-opacity="0.38"/><stop offset="0.16" stop-color="#000" stop-opacity="0"/>
+    <stop offset="0.5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.82"/></linearGradient></defs>
+    <rect width="${W}" height="${H}" fill="url(#g)"/>`);
+  layers.push({ input: shade, left: 0, top: 0 });
+  layers.push(...(await brandMark(c, "#FFFFFF")));
+  const bottom = H - c.bottom;
+  const head = await fit(s.headline, { font: f.display, size: 118, min: 56, weight: f.dw, italic: f.italic, upper: f.upper, color: "#FFFFFF", width, maxH: H * 0.3, lh: f.lh });
+  let y = bottom - head.h;
+  if (s.body) {
+    const b = await text(s.body, { font: f.body, size: 36, weight: 500, color: "#FFFFFF", alpha: 0.88, width: width * 0.92, lh: 1.3 });
+    y -= b.h + 24;
+    layers.push({ input: b.buf, left: M, top: Math.round(y + head.h + 24) });
+  }
+  layers.push({ input: head.buf, left: M, top: Math.round(y) });
+  if (s.kicker) {
+    const k = await pill(s.kicker, c.accent, on(c.accent), f.body, 28, 700);
+    layers.push({ input: k.buf, left: M, top: Math.round(y - k.h - 28) });
+  }
+  const safe: OverlayOptions[] = [];
+  for (const l of layers) safe.push({ ...l, left: Math.max(0, Math.round(l.left ?? 0)), top: Math.max(0, Math.round(l.top ?? 0)) });
+  return sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite(safe).png().toBuffer();
+}

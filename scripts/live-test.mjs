@@ -2,7 +2,8 @@
 // Signs up a throwaway user, adds a product with a real photo, makes a Hindi voiced reel (+AI scene) and a Hinglish post.
 import { mkdirSync, writeFileSync } from "node:fs";
 
-const [B = "http://localhost:3100", OUT = "/tmp/kalakar-live"] = process.argv.slice(2);
+const [B = "http://localhost:3100", OUT = "/tmp/kalakar-live", MODE = "basic"] = process.argv.slice(2);
+const PREMIUM = MODE === "premium";
 mkdirSync(OUT, { recursive: true });
 let cookie = "";
 async function api(method, path, body) {
@@ -36,8 +37,8 @@ const product = await api("POST", "/products", {
 console.log("setup", ((Date.now() - t0) / 1000).toFixed(1) + "s | photo by", photo.asset.credit?.name);
 
 const make = (brief) => api("POST", "/posts", { brief: { productId: product.product.id, style: "auto", voice: { enabled: true, gender: "female", style: "warm" }, music: false, ...brief } });
-const reel = (await make({ format: "reel", goal: "launch", language: "hi", aiScene: true, slides: 4 })).post;
-const post = (await make({ format: "image", goal: "offer", language: "hinglish", aiScene: false })).post;
+const reel = (await make({ format: "reel", goal: "launch", language: "hi", aiScene: !PREMIUM, premium: PREMIUM, slides: 4 })).post;
+const post = (await make(PREMIUM ? { format: "carousel", goal: "showcase", language: "hinglish", aiScene: false, premium: true, slides: 4 } : { format: "image", goal: "offer", language: "hinglish", aiScene: false })).post;
 
 for (const p of [reel, post]) {
   const t = Date.now();
@@ -46,7 +47,7 @@ for (const p of [reel, post]) {
     cur = (await api("GET", `/posts/${p.id}`)).post;
     if (!["draft", "generating"].includes(cur.status)) break;
     await new Promise((r) => setTimeout(r, 3000));
-    if (Date.now() - t > 9 * 60_000) throw new Error("timeout");
+    if (Date.now() - t > 14 * 60_000) throw new Error("timeout");
   }
   console.log(`\n${cur.format}: ${cur.status} in ${((Date.now() - t) / 1000).toFixed(0)}s | writer ${cur.content?.writer} | style ${cur.content?.style} | scene ${cur.content?.hasScene} | voiced ${cur.content?.voiced}`);
   if (cur.error) console.log("  error:", cur.error);

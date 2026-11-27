@@ -68,7 +68,7 @@ export default function Studio() {
   }, []);
 
   const product = products?.find((p) => p.id === b.productId) ?? null;
-  const cost = COST[b.format] + (b.aiScene ? 2 : 0);
+  const cost = COST[b.format] + (b.premium ? (b.format === "reel" ? 8 : 3) : b.aiScene ? 2 : 0);
   const size = b.format === "reel" || b.format === "story" ? "story" : "feed";
   const previewStyle = b.style === "auto" ? ({ luxury: "luxury", bold: "bold", playful: "playful" } as Record<string, string>)[profile?.fontStyle ?? ""] ?? "studio" : b.style === "lifestyle" && !product?.images.length ? "studio" : b.style;
   const preview = useMemo(() => `/api/preview?style=${previewStyle}&size=${size}${b.productId ? `&product=${b.productId}` : ""}`, [previewStyle, size, b.productId]);
@@ -249,8 +249,22 @@ export default function Studio() {
                   <Toggle on={b.music} disabled={!profile?.music} onChange={(v) => setB({ ...b, music: v })} label="Background music" hint={profile?.music ? "Your brand track, mixed under the voice." : "Upload a track in Settings → Brand kit."} />
                 </div>
               )}
-              <div className="p-4">
-                <Toggle on={b.aiScene} disabled={!canScene} onChange={(v) => setB({ ...b, aiScene: v, style: v && b.style === "auto" ? "lifestyle" : b.style })} label="AI photo scene (+2 credits)" hint={canScene ? "Places your product in a real-looking setting, then designs on top." : "Needs an image AI key (Gemini or OpenAI) on the server."} />
+              {canScene && (
+                <div className="bg-brass/[0.07] p-4">
+                  <Toggle
+                    on={Boolean(b.premium)}
+                    onChange={(v) => setB({ ...b, premium: v, aiScene: false, style: v && b.style === "auto" ? "lifestyle" : b.style })}
+                    label={`Premium: real people + AI ${b.format === "reel" ? "motion video" : "photoshoot"} (+${b.format === "reel" ? 8 : 3} credits)`}
+                    hint={
+                      b.format === "reel"
+                        ? "An AI photoshoot of your product (hero, a real-looking person using it, a close-up), each filmed into a moving clip with camera motion, plus animated text and voice. Takes 3 to 5 minutes."
+                        : "An AI photoshoot of your product: a hero scene, a real-looking person using it and a close-up, used as the post's photos. Takes 1 to 2 minutes."
+                    }
+                  />
+                </div>
+              )}
+              <div className={`p-4 ${b.premium ? "hidden" : ""}`}>
+                <Toggle on={b.aiScene} disabled={!canScene} onChange={(v) => setB({ ...b, aiScene: v, style: v && b.style === "auto" ? "lifestyle" : b.style })} label="AI photo scene (+2 credits)" hint={canScene ? "Places your product in a real-looking setting, then designs on top." : "Needs an image AI key (Hugging Face, Gemini or OpenAI) on the server."} />
               </div>
               <div className="p-4">
                 <Field label="Anything specific? (optional)">

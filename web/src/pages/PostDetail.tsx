@@ -6,7 +6,7 @@ import { FORMAT_LABEL, Icon, Spinner, StatusBadge, fmtWhen, toLocalInput } from 
 import { PostPreview } from "../components/PostPreview";
 import type { Post, Slide } from "../types";
 
-const STEP_LABEL: Record<string, string> = { read: "Reading your product", write: "Writing caption & script", design: "Designing the slides", voice: "Recording the voiceover", video: "Editing the reel" };
+const STEP_LABEL: Record<string, string> = { read: "Reading your product", write: "Writing caption & script", shoot: "AI photoshoot (real people)", film: "Filming AI video clips", design: "Designing the slides", voice: "Recording the voiceover", video: "Editing the reel" };
 
 function Making({ post }: { post: Post }) {
   const steps = post.progress.steps ?? ["read", "write", "design", ...(post.format === "reel" ? ["voice", "video"] : [])];
