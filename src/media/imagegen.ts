@@ -1,4 +1,5 @@
 // Optional AI scene generation (product placed in a photographed setting). Gemini or OpenAI.
+import { InferenceClient } from "@huggingface/inference";
 import { config, imageProvider } from "../config.js";
 
 export type SceneReq = { prompt: string; photo?: Buffer | null; aspect: "4:5" | "9:16" };
@@ -57,9 +58,30 @@ async function openai(r: SceneReq): Promise<Buffer> {
   return Buffer.from(b, "base64");
 }
 
+/** Kontext keeps products best with a short, strict edit instruction (a long brief lets it redesign the product). */
+const editPrompt = (r: SceneReq) =>
+  `Keep every product in this photo exactly as it is: same items, same number of items, same shape, colours, caps and labels, same arrangement. ` +
+  `Only replace the background and surroundings with: ${r.prompt.replace(/\s+/g, " ").slice(0, 300)}. ` +
+  `Photorealistic product photography, natural light, soft shadows. No text, no logos added.`;
+
+/** Hugging Face Inference Providers: FLUX Kontext edits the real product photo into a scene; FLUX schnell when there is no photo. */
+async function hf(r: SceneReq): Promise<Buffer> {
+  const client = new InferenceClient(config.hfToken);
+  const blob = r.photo
+    ? await client.imageToImage({
+        provider: "auto",
+        model: config.hfEditModel,
+        inputs: new Blob([new Uint8Array(r.photo)], { type: "image/jpeg" }),
+        parameters: { prompt: editPrompt(r), guidance_scale: 2.5 },
+      })
+    : await client.textToImage({ provider: "auto", model: config.hfImageModel, inputs: framing(r) }, { outputType: "blob" });
+  return Buffer.from(await (blob as Blob).arrayBuffer());
+}
+
 /** Null when no image provider is configured. */
 export async function generateScene(r: SceneReq): Promise<Buffer | null> {
   const p = imageProvider();
   if (!p) return null;
+  if (p === "hf") return hf(r);
   return p === "gemini" ? gemini(r) : openai(r);
 }

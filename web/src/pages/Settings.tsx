@@ -310,7 +310,7 @@ function AccountForm() {
   const [name, setName] = useState(user!.name);
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "" });
   const rows: [string, string, boolean][] = [
-    ["AI writer", system.writer === "claude" ? "Claude" : "Templates (add ANTHROPIC_API_KEY)", system.writer === "claude"],
+    ["AI writer", ({ claude: "Claude", sarvam: "Sarvam AI (sarvam-105b)", gemini: "Gemini" } as Record<string, string>)[system.writer] ?? "Templates (add a Sarvam, Claude or Gemini key)", system.writer !== "templates"],
     ["AI scenes", system.image === "studio" ? "Studio designer only (add GEMINI_API_KEY or OPENAI_API_KEY)" : system.image, system.image !== "studio"],
     ["Voiceover", system.voice.length ? system.voice.join(", ") : "None (add ELEVENLABS / SARVAM / OPENAI key)", system.voice.length > 0],
     ["Instagram", system.instagram === "live" ? "Live publishing" : "Demo only (add IG_APP_ID / IG_APP_SECRET)", system.instagram === "live"],

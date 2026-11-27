@@ -23,14 +23,22 @@ export const config = {
   openaiImageModel: env("OPENAI_IMAGE_MODEL", "gpt-image-1"),
   openaiTtsModel: env("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
   geminiKey: env("GEMINI_API_KEY"),
-  geminiImageModel: env("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
-  imageProvider: env("IMAGE_PROVIDER", "auto") as "auto" | "openai" | "gemini" | "none",
+  geminiImageModel: env("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image"),
+  geminiTextModel: env("GEMINI_TEXT_MODEL", "gemini-flash-latest"),
+  imageProvider: env("IMAGE_PROVIDER", "auto") as "auto" | "hf" | "openai" | "gemini" | "none",
+  // Hugging Face Inference Providers: FLUX Kontext keeps the real product in a new scene
+  hfToken: env("HF_TOKEN"),
+  hfEditModel: env("HF_EDIT_MODEL", "black-forest-labs/FLUX.1-Kontext-dev"),
+  hfImageModel: env("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell"),
 
   // Voice
   elevenKey: env("ELEVENLABS_API_KEY"),
   elevenModel: env("ELEVENLABS_MODEL", "eleven_multilingual_v2"),
   sarvamKey: env("SARVAM_API_KEY"),
-  sarvamModel: env("SARVAM_MODEL", "bulbul:v2"),
+  sarvamModel: env("SARVAM_MODEL", "bulbul:v3"),
+  sarvamTextModel: env("SARVAM_TEXT_MODEL", "sarvam-105b"),
+  /** Who writes the copy: auto = Claude, then Sarvam, then Gemini, then templates. */
+  writerPref: env("WRITER", "auto") as "auto" | "claude" | "sarvam" | "gemini" | "templates",
 
   // Instagram API with Instagram Login (Meta app)
   igAppId: env("IG_APP_ID"),
@@ -60,9 +68,15 @@ export const igLoginMode = (): "unified" | "instagram" | null =>
   config.metaAppId && config.metaAppSecret && config.metaConfigId ? "unified" : config.igAppId && config.igAppSecret ? "instagram" : null;
 export const igConfigured = () => igLoginMode() !== null;
 
+export function writerProvider(): "claude" | "sarvam" | "gemini" | "templates" {
+  const has = { claude: config.hasClaude, sarvam: Boolean(config.sarvamKey), gemini: Boolean(config.geminiKey), templates: true };
+  if (config.writerPref !== "auto") return has[config.writerPref] ? config.writerPref : "templates";
+  return has.claude ? "claude" : has.sarvam ? "sarvam" : has.gemini ? "gemini" : "templates";
+}
+
 export function providerStatus() {
   return {
-    writer: config.hasClaude ? "claude" : "templates",
+    writer: writerProvider(),
     image: imageProvider() ?? "studio",
     voice: [config.elevenKey && "elevenlabs", config.sarvamKey && "sarvam", config.openaiKey && "openai"].filter(Boolean) as string[],
     instagram: igConfigured() ? "live" : config.allowDemoInstagram ? "demo" : "off",
@@ -72,11 +86,13 @@ export function providerStatus() {
   };
 }
 
-export function imageProvider(): "openai" | "gemini" | null {
+export function imageProvider(): "hf" | "openai" | "gemini" | null {
   const p = config.imageProvider;
   if (p === "none") return null;
+  if (p === "hf") return config.hfToken ? "hf" : null;
   if (p === "openai") return config.openaiKey ? "openai" : null;
   if (p === "gemini") return config.geminiKey ? "gemini" : null;
+  if (config.hfToken) return "hf";
   if (config.geminiKey) return "gemini";
   if (config.openaiKey) return "openai";
   return null;

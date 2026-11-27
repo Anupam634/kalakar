@@ -14,7 +14,8 @@ const ELEVEN_VOICES: Record<string, string> = {
   "male:deep": process.env.ELEVENLABS_VOICE_MALE ?? "pNInz6obpgDQGcFmaJgB",
   "male:friendly": "TxGEqnHWrfWFTfGW9XjX",
 };
-const SARVAM_SPEAKERS: Record<string, string> = { "female:warm": "anushka", "female:energetic": "manisha", "male:deep": "abhilash", "male:friendly": "karun" };
+// bulbul:v3 speakers (v2's anushka/abhilash/... were retired with it)
+const SARVAM_SPEAKERS: Record<string, string> = { "female:warm": "priya", "female:energetic": "simran", "male:deep": "kabir", "male:friendly": "rohan" };
 const OPENAI_VOICES: Record<string, string> = { "female:warm": "coral", "female:energetic": "nova", "male:deep": "onyx", "male:friendly": "ash" };
 
 const key = (o: VoiceOpts) => {
@@ -52,11 +53,10 @@ async function sarvam(text: string, o: VoiceOpts): Promise<Speech> {
     body: JSON.stringify({
       text: text.slice(0, 1500),
       target_language_code: SARVAM_LANG[o.lang] ?? "hi-IN",
-      speaker: SARVAM_SPEAKERS[key(o)] ?? "anushka",
+      speaker: SARVAM_SPEAKERS[key(o)] ?? "priya",
       model: config.sarvamModel,
       pace: o.style === "energetic" ? 1.1 : 1.0,
       speech_sample_rate: 24000,
-      enable_preprocessing: true,
     }),
   });
   if (!r.ok) throw new Error(`Sarvam ${r.status}: ${(await r.text()).slice(0, 200)}`);

@@ -220,7 +220,7 @@ export default function PostDetail() {
             <div className="card p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="font-serif text-2xl">Words</h3>
-                <span className="text-xs text-mute">{c.writer === "claude" ? "Written by Claude" : "Template copy"}</span>
+                <span className="text-xs text-mute">{({ claude: "Written by Claude", sarvam: "Written by Sarvam AI", gemini: "Written by Gemini" } as Record<string, string>)[c.writer] ?? "Template copy"}</span>
               </div>
               <span className="label">Caption</span>
               <textarea className="input min-h-44 leading-relaxed" disabled={!editable} value={caption} onChange={(e) => (setCaption(e.target.value), setDirty(true))} />

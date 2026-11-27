@@ -2,7 +2,7 @@
 // Claude call with a JSON-schema response. Falls back to templates when no Claude key is set.
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
-import { config } from "../config.js";
+import { config, writerProvider } from "../config.js";
 import type { PostFormat, Product, Profile } from "../db.js";
 import type { Style } from "../media/compose.js";
 import { ai, base, textOf } from "./client.js";
@@ -58,7 +58,7 @@ const ContentZ = z.object({
   product_look: z.string(),
   slides: z.array(SlideZ),
 });
-export type Content = z.infer<typeof ContentZ> & { writer: "claude" | "template" };
+export type Content = z.infer<typeof ContentZ> & { writer: "claude" | "sarvam" | "gemini" | "template" };
 export type SlideCopy = z.infer<typeof SlideZ>;
 
 const SCHEMA = {
@@ -157,6 +157,7 @@ export function promptFor({ profile: p, product, brief: b, avoid }: WriterInput)
     avoid?.length ? `- Recent hooks already used (do not repeat their angle): ${avoid.map((h) => `"${h}"`).join(", ")}` : "",
     "",
     "Caption: 60-160 words, short paragraphs, ends with a clear call to action. Hashtags go only in the hashtags field.",
+    "Hashtags: mix English tags with tags in the post's language; no spaces, no # sign.",
     "scene_prompt: describe a real photographed setting that fits the product and brand (surface, props, light, colour palette, mood). No text in the scene.",
     product ? "If a product photo is attached, describe it in product_look and make the copy match what is actually visible." : "product_look: empty string.",
   ];
@@ -175,7 +176,10 @@ function normalise(c: z.infer<typeof ContentZ>, n: number, b: Brief): z.infer<ty
 
 export async function writeContent(input: WriterInput): Promise<Content> {
   const n = slideCount(input.brief);
-  if (!config.hasClaude) return { ...templateContent(input, n), writer: "template" };
+  const who = writerProvider();
+  if (who === "templates") return { ...templateContent(input, n), writer: "template" };
+  if (who === "sarvam") return { ...normalise(await sarvamWrite(input), n, input.brief), writer: "sarvam" };
+  if (who === "gemini") return { ...normalise(await geminiWrite(input), n, input.brief), writer: "gemini" };
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
   if (input.photo) {
     content.push({
@@ -195,6 +199,75 @@ export async function writeContent(input: WriterInput): Promise<Content> {
   if (msg.stop_reason === "max_tokens") throw new Error("The AI response was cut off. Please try again.");
   const parsed = ContentZ.parse(JSON.parse(textOf(msg)));
   return { ...normalise(parsed, n, input.brief), writer: "claude" };
+}
+
+// ---------- Sarvam (sarvam-105b) and Gemini writers: same prompt, same checks ----------
+
+/** Pulls the JSON object out of a model reply (skips any <think> block or code fences). */
+function jsonOf(text: string): unknown {
+  const t = text.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```(?:json)?/g, "").trim();
+  const a = t.indexOf("{");
+  const b = t.lastIndexOf("}");
+  if (a < 0 || b <= a) throw new Error("The writer returned no JSON.");
+  return JSON.parse(t.slice(a, b + 1));
+}
+
+const JSON_SHAPE = `Reply with ONE JSON object only (no markdown, no explanation) with exactly these keys:
+{"hook": string, "caption": string, "hashtags": string[], "alt_text": string, "cta": string, "scene_prompt": string, "product_look": string,
+ "slides": [{"kicker": string, "headline": string, "body": string, "voiceover": string}]}
+Use "" for fields that do not apply.`;
+
+async function sarvamWrite(input: WriterInput): Promise<z.infer<typeof ContentZ>> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await fetch("https://api.sarvam.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "api-subscription-key": config.sarvamKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.sarvamTextModel,
+        messages: [
+          { role: "system", content: `${SYSTEM}\n\n${JSON_SHAPE}` },
+          { role: "user", content: promptFor(input) },
+        ],
+        max_tokens: 14000, // the model reasons first; leave room for the answer
+        reasoning_effort: "low",
+        temperature: 0.7,
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string }; finish_reason?: string }[]; error?: { message?: string } };
+    if (!r.ok) throw new Error(`Sarvam writer ${r.status}: ${j.error?.message ?? "request failed"}`);
+    try {
+      return ContentZ.parse(jsonOf(j.choices?.[0]?.message?.content ?? ""));
+    } catch (e) {
+      last = e; // malformed or cut-off answer: ask once more
+    }
+  }
+  throw new Error(`The Sarvam writer did not return usable copy (${(last as Error)?.message ?? "unknown"}). Please try again.`);
+}
+
+async function geminiWrite(input: WriterInput): Promise<z.infer<typeof ContentZ>> {
+  const parts: unknown[] = [];
+  if (input.photo) parts.push({ inline_data: { mime_type: input.photo.mime, data: input.photo.buf.toString("base64") } });
+  parts.push({ text: promptFor(input) });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.geminiTextModel}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": config.geminiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM }] },
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json", responseJsonSchema: SCHEMA },
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { candidates?: { content?: { parts?: { text?: string }[] } }[]; error?: { message?: string } };
+    if (r.status === 503 || r.status === 429) {
+      await new Promise((res) => setTimeout(res, 3000 * (attempt + 1)));
+      continue;
+    }
+    if (!r.ok) throw new Error(`Gemini writer ${r.status}: ${j.error?.message ?? "request failed"}`);
+    return ContentZ.parse(jsonOf((j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("")));
+  }
+  throw new Error("Gemini is busy right now. Please try again in a minute.");
 }
 
 // ---------- template fallback (no API key) ----------

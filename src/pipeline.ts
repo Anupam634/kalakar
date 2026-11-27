@@ -46,7 +46,12 @@ function slideTexts(c: Content, b: Brief, product: Product | null): { role: Role
     const body = s.body || undefined;
     if (n === 1) return { role: "single" as Role, text: { kicker: k, headline: s.headline, body, price, cta: c.cta || undefined } };
     if (i === 0) return { role: (b.format === "carousel" ? "cover" : "single") as Role, text: { kicker: k, headline: s.headline, body, index: 1, total: pager } };
-    if (i === n - 1) return { role: "cta" as Role, text: { headline: s.headline, body: body ?? product?.offer ?? undefined, price, cta: c.cta || undefined } };
+    if (i === n - 1) {
+      // writers sometimes repeat the call to action as the body line: show it once, as the button
+      const same = (a?: string, b?: string) => Boolean(a && b && a.trim().toLowerCase() === b.trim().toLowerCase());
+      const line = body ?? product?.offer ?? undefined;
+      return { role: "cta" as Role, text: { headline: s.headline, body: same(line, c.cta) || same(line, s.headline) ? undefined : line, price, cta: c.cta || undefined } };
+    }
     return { role: "point" as Role, text: { headline: s.headline, body, index: i + 1, total: pager } };
   });
 }
